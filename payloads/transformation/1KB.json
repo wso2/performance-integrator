@@ -1,0 +1,46 @@
+{
+  "payload": {
+    "orderId": "ORD-20240115-001234",
+    "status": "PROCESSING",
+    "currency": "USD",
+    "totalAmount": 299.97,
+    "createdAt": "2024-01-15T10:30:00Z",
+    "customer": {
+      "id": "CUST-98765",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "email": "jane.smith@example.com",
+      "phone": "+1-555-0199"
+    },
+    "shippingAddress": {
+      "street": "456 Oak Avenue",
+      "city": "Springfield",
+      "state": "IL",
+      "zipCode": "62701",
+      "country": "US"
+    },
+    "items": [
+      {
+        "sku": "PROD-A001",
+        "name": "Wireless Mechanical Keyboard",
+        "quantity": 1,
+        "unitPrice": 149.99,
+        "subtotal": 149.99
+      },
+      {
+        "sku": "PROD-B042",
+        "name": "USB-C Multiport Hub",
+        "quantity": 2,
+        "unitPrice": 44.99,
+        "subtotal": 89.98
+      },
+      {
+        "sku": "PROD-C117",
+        "name": "Extended Mouse Pad XL",
+        "quantity": 1,
+        "unitPrice": 24.99,
+        "subtotal": 24.99
+      }
+    ]
+  }
+}

@@ -13,7 +13,6 @@
 # Package Files #
 *.jar
 *.war
-*.nar
 *.ear
 *.zip
 *.tar.gz
@@ -21,41 +20,30 @@
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
-replay_pid*
 
-# macOS
-.DS_Store
-.AppleDouble
-._*
-
-# Maven / Java
+# Compiled directories
 target/
-*.class
+tomcat*/
 dependency-reduced-pom.xml
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-venv/
-
-# Ballerina
-.ballerina/
-
-# JMeter outputs
-*.jtl
-scripts/logs/
-scripts/results/
-
-# IDE
+# IDE files
 .idea/
 *.iml
-.vscode/
+*.ipr
+*.iws
+.DS_Store
 
-# Shell
-nohup.out
-*.log
+# MSF4J
+deployment.yaml
 
-# Certificates
-*.pem
+# React
+app/node_modules/
+app/coverage/
+app/build/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
