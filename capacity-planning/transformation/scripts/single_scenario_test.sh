@@ -1,14 +1,17 @@
 #!/bin/bash
-# Passthrough scenario – capacity planning (constant-throughput RPS testing).
+# Single-scenario capacity planning test with per-scenario warmup.
+# Runs one warmup (same payload and threads, 10% of target RPS) followed by one main test.
+#
 # Required env vars: DOMAIN, AUTH_HEADER
 # Example:
 #   export DOMAIN="your.domain.com"
 #   export AUTH_HEADER="Bearer your_token"
+#   ./single_scenario_test.sh -r 500 -t 100 -p 10KB
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../../scripts/common.sh"
 
-PAYLOADS_DIR="$SCRIPT_DIR/../../../payloads/passthrough"
+PAYLOADS_DIR="$SCRIPT_DIR/../../../payloads/transformation"
 JMETER_PATH="$SCRIPT_DIR/../apache-jmeter-5.6.3/bin/jmeter"
 TEST_PLAN="$SCRIPT_DIR/test.jmx"
 
@@ -18,41 +21,34 @@ RESULTS_DIR="$SCRIPT_DIR/results/${TIMESTAMP}"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_DURATION=600
-DEFAULT_COOLDOWN=120
-DEFAULT_PAYLOADS=("1KB" "10KB" "50KB" "100KB" "250KB" "1MB")
-DEFAULT_RPS_TARGETS=(10 50 100 200 500 1000 2000 5000)
-DEFAULT_THREAD_COUNTS=(10 50 100 500)
+DEFAULT_WARMUP_DURATION=120
+WARMUP_COOLDOWN=30
 
-WARMUP_DURATION=120
-WARMUP_RPS=10
-WARMUP_THREADS=10
-WARMUP_PAYLOAD="1KB"
-
+RPS=""
+THREADS=""
+PAYLOAD=""
 DURATION=$DEFAULT_DURATION
-COOLDOWN=$DEFAULT_COOLDOWN
-PAYLOADS=("${DEFAULT_PAYLOADS[@]}")
-RPS_TARGETS=("${DEFAULT_RPS_TARGETS[@]}")
-THREAD_COUNTS=("${DEFAULT_THREAD_COUNTS[@]}")
-BACKGROUND_MODE=false
+WARMUP_DURATION=$DEFAULT_WARMUP_DURATION
 DRY_RUN=false
 
 # ── Usage ─────────────────────────────────────────────────────────────────────
 show_usage() {
-    echo "Usage: $0 [OPTIONS]"
+    echo "Usage: $0 -r RPS -t THREADS -p PAYLOAD [OPTIONS]"
+    echo ""
+    echo "Required:"
+    echo "  -r, --rps RPS                Target requests per second"
+    echo "  -t, --threads THREADS        Number of concurrent connections"
+    echo "  -p, --payload PAYLOAD        Payload size (e.g., 1KB, 10KB, 50KB, 100KB)"
     echo ""
     echo "Options:"
-    echo "  -r, --rps RPS_LIST            Comma-separated list of target RPS (e.g., 50,100,200)"
-    echo "  -p, --payloads PAYLOAD_LIST   Comma-separated list of payloads (e.g., 1KB,10KB)"
-    echo "  -t, --threads THREAD_LIST     Comma-separated list of concurrent connections (e.g., 10,50,100)"
-    echo "  -d, --duration SECONDS        Test duration in seconds (default: $DEFAULT_DURATION)"
-    echo "  -c, --cooldown SECONDS        Cooldown period between tests in seconds (default: $DEFAULT_COOLDOWN)"
-    echo "  -b, --background              Run in background mode (survives SSH disconnection)"
-    echo "  -n, --dry-run                 Show test execution order without running tests"
-    echo "  -h, --help                    Show this help message"
+    echo "  -d, --duration SECONDS       Test duration in seconds (default: $DEFAULT_DURATION)"
+    echo "  --warmup-duration SECONDS    Warmup duration in seconds (default: $DEFAULT_WARMUP_DURATION)"
+    echo "  -n, --dry-run                Show what would run without executing"
+    echo "  -h, --help                   Show this help message"
     echo ""
-    echo "Available payloads: 1KB, 10KB, 50KB, 100KB, 250KB, 1MB"
-    echo "Default RPS targets: ${DEFAULT_RPS_TARGETS[*]}"
-    echo "Default thread counts: ${DEFAULT_THREAD_COUNTS[*]}"
+    echo "Available payloads: 1KB, 10KB, 50KB, 100KB"
+    echo ""
+    echo "Warmup: same payload and threads, 10% of target RPS (minimum 1), ${DEFAULT_WARMUP_DURATION}s"
     exit "${1:-1}"
 }
 
@@ -61,21 +57,20 @@ parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -r|--rps)
-                [[ -z "$2" ]] && { print_error "--rps requires an argument"; show_usage; }
-                IFS=',' read -ra RPS_TARGETS <<< "$2"; shift 2 ;;
-            -p|--payloads)
-                [[ -z "$2" ]] && { print_error "--payloads requires an argument"; show_usage; }
-                IFS=',' read -ra PAYLOADS <<< "$2"; shift 2 ;;
+                [[ -z "$2" ]] && { print_error "--rps requires a value"; show_usage; }
+                RPS=$2; shift 2 ;;
             -t|--threads)
-                [[ -z "$2" ]] && { print_error "--threads requires an argument"; show_usage; }
-                IFS=',' read -ra THREAD_COUNTS <<< "$2"; shift 2 ;;
+                [[ -z "$2" ]] && { print_error "--threads requires a value"; show_usage; }
+                THREADS=$2; shift 2 ;;
+            -p|--payload)
+                [[ -z "$2" ]] && { print_error "--payload requires a value"; show_usage; }
+                PAYLOAD=$2; shift 2 ;;
             -d|--duration)
                 [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]] && { print_error "--duration requires a positive integer"; show_usage; }
                 DURATION=$2; shift 2 ;;
-            -c|--cooldown)
-                [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]] && { print_error "--cooldown requires a positive integer"; show_usage; }
-                COOLDOWN=$2; shift 2 ;;
-            -b|--background) BACKGROUND_MODE=true; shift ;;
+            --warmup-duration)
+                [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]] && { print_error "--warmup-duration requires a positive integer"; show_usage; }
+                WARMUP_DURATION=$2; shift 2 ;;
             -n|--dry-run)    DRY_RUN=true; shift ;;
             -h|--help)       show_usage 0 ;;
             *) print_error "Unknown option: $1"; show_usage ;;
@@ -83,18 +78,12 @@ parse_arguments() {
     done
 }
 
-# ── Payload validation (plain-text .txt files) ────────────────────────────────
-validate_payloads() {
-    local invalid=()
-    for payload in "${PAYLOADS[@]}"; do
-        [[ ! -f "$PAYLOADS_DIR/${payload}.txt" ]] && invalid+=("$payload")
-    done
-    if [[ ${#invalid[@]} -gt 0 ]]; then
-        print_error "Invalid payload files: ${invalid[*]}"
-        print_info "Available payloads in $PAYLOADS_DIR:"
-        ls -1 "$PAYLOADS_DIR"/*.txt 2>/dev/null | sed "s|$PAYLOADS_DIR/||;s/.txt$//" | sed 's/^/  /'
-        exit 1
-    fi
+# ── Warmup RPS: 10% of target RPS, minimum 1 ─────────────────────────────────
+compute_warmup_rps() {
+    local rps=$1
+    local warmup=$(( rps / 10 ))
+    [[ $warmup -lt 1 ]] && warmup=1
+    echo $warmup
 }
 
 # ── JTL filename helper ───────────────────────────────────────────────────────
@@ -193,7 +182,7 @@ EOF
 # ── Run a single JMeter test ──────────────────────────────────────────────────
 run_jmeter_test() {
     local rps=$1 threads=$2 duration=$3 payload=$4 test_type=$5 description=$6 summary_file=${7:-""}
-    local payload_file="${payload}.txt"
+    local payload_file="${payload}.json"
     local jtl_file
     jtl_file=$(create_jtl_filename "$rps" "$threads" "$payload_file" "$test_type")
     local log_file="${LOG_DIR}/${test_type}_${rps}rps_${threads}threads_${payload}_${TIMESTAMP}.log"
@@ -229,39 +218,56 @@ run_jmeter_test() {
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 parse_arguments "$@"
-handle_background_mode "$@"
+
+if [ "$DRY_RUN" = true ]; then
+    print_header "DRY RUN MODE - SINGLE SCENARIO PREVIEW"
+else
+    print_header "SINGLE SCENARIO TEST INITIALIZATION"
+fi
+
+print_info "Validating arguments..."
+
+[[ -z "$RPS" ]]     && { print_error "--rps is required";     show_usage; }
+[[ -z "$THREADS" ]] && { print_error "--threads is required"; show_usage; }
+[[ -z "$PAYLOAD" ]] && { print_error "--payload is required"; show_usage; }
+
+validate_positive_integers "RPS" "$RPS"
+validate_positive_integers "thread count" "$THREADS"
+
+if [[ ! -f "$PAYLOADS_DIR/${PAYLOAD}.json" ]]; then
+    print_error "Payload file not found: ${PAYLOADS_DIR}/${PAYLOAD}.json"
+    print_info "Available payloads:"
+    ls -1 "$PAYLOADS_DIR"/*.json 2>/dev/null | sed "s|$PAYLOADS_DIR/||;s/.json$//" | sed 's/^/  /'
+    exit 1
+fi
+
+WARMUP_RPS=$(compute_warmup_rps "$RPS")
+
+print_info "Scenario Configuration:"
+echo -e "  ${CYAN}Target RPS:${NC} $RPS | ${CYAN}Threads:${NC} $THREADS | ${CYAN}Payload:${NC} $PAYLOAD | ${CYAN}Duration:${NC} $DURATION seconds"
+echo -e "  ${CYAN}Warmup RPS:${NC} $WARMUP_RPS | ${CYAN}Warmup Duration:${NC} $WARMUP_DURATION seconds | ${CYAN}Warmup Cooldown:${NC} $WARMUP_COOLDOWN seconds"
+echo ""
+
+if [ "$DRY_RUN" = true ]; then
+    print_info "[DRY RUN] Would run warmup:    $WARMUP_RPS RPS, $THREADS threads, ${WARMUP_DURATION}s, $PAYLOAD"
+    print_info "[DRY RUN] Would run cooldown:  ${WARMUP_COOLDOWN}s"
+    print_info "[DRY RUN] Would run load test: $RPS RPS, $THREADS threads, ${DURATION}s, $PAYLOAD"
+    echo ""
+    print_header "DRY RUN COMPLETED"
+    exit 0
+fi
+
+print_info "Checking environment variables..."
+[[ -z "$DOMAIN" ]]      && { print_error "DOMAIN is not set. Example: export DOMAIN=\"your.domain.com\""; exit 1; }
+[[ -z "$AUTH_HEADER" ]] && { print_error "AUTH_HEADER is not set. Example: export AUTH_HEADER=\"Bearer token\""; exit 1; }
+
+print_info "Checking JMeter installation..."
+[[ ! -f "$JMETER_PATH" ]] && { print_error "JMeter not found at: $JMETER_PATH"; exit 1; }
+[[ ! -f "$TEST_PLAN" ]]   && { print_error "Test plan not found: $TEST_PLAN"; exit 1; }
 
 if ! mkdir -p "$LOG_DIR" "$RESULTS_DIR"; then
     print_error "Failed to create directories $LOG_DIR and $RESULTS_DIR"
     exit 1
-fi
-
-if [ "$DRY_RUN" = true ]; then
-    print_header "DRY RUN MODE - TEST EXECUTION PREVIEW"
-else
-    print_header "LOAD TEST INITIALIZATION"
-fi
-
-print_info "Validating arguments..."
-validate_payloads
-validate_positive_integers "RPS targets" "${RPS_TARGETS[@]}"
-validate_positive_integers "thread counts" "${THREAD_COUNTS[@]}"
-
-print_info "Test Configuration:"
-echo -e "  ${CYAN}Duration:${NC} $DURATION seconds | ${CYAN}Cooldown:${NC} $COOLDOWN seconds"
-echo -e "  ${CYAN}Target RPS:${NC} ${RPS_TARGETS[*]}"
-echo -e "  ${CYAN}Concurrent Connections:${NC} ${THREAD_COUNTS[*]}"
-echo -e "  ${CYAN}Payloads:${NC} ${PAYLOADS[*]}"
-echo ""
-
-if [ "$DRY_RUN" = false ]; then
-    print_info "Checking environment variables..."
-    [[ -z "$DOMAIN" ]] && { print_error "DOMAIN is not set. Example: export DOMAIN=\"your.domain.com\""; exit 1; }
-    [[ -z "$AUTH_HEADER" ]] && { print_error "AUTH_HEADER is not set. Example: export AUTH_HEADER=\"Bearer token\""; exit 1; }
-
-    print_info "Checking JMeter installation..."
-    [[ ! -f "$JMETER_PATH" ]] && { print_error "JMeter not found at: $JMETER_PATH"; exit 1; }
-    [[ ! -f "$TEST_PLAN" ]]   && { print_error "Test plan not found: $TEST_PLAN"; exit 1; }
 fi
 
 print_success "Validation completed"
@@ -269,87 +275,47 @@ echo ""
 
 SUMMARY_FILE="${RESULTS_DIR}/test_summary_${TIMESTAMP}.txt"
 {
-    echo "Load Test Summary - $(date)"
+    echo "Single Scenario Test Summary - $(date)"
     echo "Domain: $DOMAIN"
-    echo "Test Type: Constant Throughput Testing"
-    echo "Duration: $DURATION seconds | Cooldown: $COOLDOWN seconds"
-    echo "Target RPS: ${RPS_TARGETS[*]}"
-    echo "Concurrent Connections: ${THREAD_COUNTS[*]}"
-    echo "Payloads: ${PAYLOADS[*]}"
-    echo "Warmup: $WARMUP_RPS RPS with $WARMUP_THREADS threads for $WARMUP_DURATION seconds"
+    echo "Target RPS: $RPS | Threads: $THREADS | Payload: $PAYLOAD | Duration: $DURATION seconds"
+    echo "Warmup: $WARMUP_RPS RPS, $THREADS threads for $WARMUP_DURATION seconds (same payload)"
     echo "==========================================="
     echo ""
 } > "$SUMMARY_FILE"
 
-TOTAL_TESTS=$((${#PAYLOADS[@]} * ${#RPS_TARGETS[@]} * ${#THREAD_COUNTS[@]} + 1))
-CURRENT_TEST=0
-
 # ── Warmup ────────────────────────────────────────────────────────────────────
-print_header "STARTING WARMUP RUN"
-CURRENT_TEST=$((CURRENT_TEST + 1))
-echo -e "${PURPLE}Test $CURRENT_TEST of $TOTAL_TESTS${NC}"
+print_header "WARMUP"
 
-if [ "$DRY_RUN" = true ]; then
-    print_info "[DRY RUN] Would run warmup: $WARMUP_RPS RPS, $WARMUP_THREADS threads, ${WARMUP_DURATION}s, $WARMUP_PAYLOAD"
-    echo ""
+if run_jmeter_test "$WARMUP_RPS" "$THREADS" "$WARMUP_DURATION" "$PAYLOAD" "warmup" \
+        "Warmup: ${WARMUP_RPS} RPS, ${THREADS} threads for ${WARMUP_DURATION}s with ${PAYLOAD} payload" "$SUMMARY_FILE"; then
+    echo "Warmup - SUCCESS" >> "$SUMMARY_FILE"
 else
-    if run_jmeter_test "$WARMUP_RPS" "$WARMUP_THREADS" "$WARMUP_DURATION" "$WARMUP_PAYLOAD" "warmup" \
-            "Warmup run with ${WARMUP_RPS} RPS and ${WARMUP_THREADS} threads for ${WARMUP_DURATION} seconds" "$SUMMARY_FILE"; then
-        echo "Warmup - SUCCESS" >> "$SUMMARY_FILE"
-        print_info "Warmup cooldown (30 seconds)..."
-        show_progress 30
-    else
-        echo "Warmup - FAILED" >> "$SUMMARY_FILE"
-        print_warning "Warmup failed, continuing with main tests..."
-    fi
+    echo "Warmup - FAILED" >> "$SUMMARY_FILE"
+    print_warning "Warmup failed, continuing with main test..."
 fi
 
-# ── Main load tests ───────────────────────────────────────────────────────────
-print_header "STARTING MAIN LOAD TESTS"
+print_info "Warmup cooldown (${WARMUP_COOLDOWN} seconds)..."
+show_progress $WARMUP_COOLDOWN
 
-for RPS in "${RPS_TARGETS[@]}"; do
-    for PAYLOAD in "${PAYLOADS[@]}"; do
-        for THREADS in "${THREAD_COUNTS[@]}"; do
-            CURRENT_TEST=$((CURRENT_TEST + 1))
-            echo -e "${PURPLE}Test $CURRENT_TEST of $TOTAL_TESTS${NC}"
+# ── Main load test ────────────────────────────────────────────────────────────
+print_header "MAIN LOAD TEST"
 
-            if [ "$DRY_RUN" = true ]; then
-                print_info "[DRY RUN] Would run: $RPS RPS, $THREADS threads, ${DURATION}s, $PAYLOAD"
-                echo ""
-            else
-                if run_jmeter_test "$RPS" "$THREADS" "$DURATION" "$PAYLOAD" "loadtest" \
-                        "Constant throughput test: ${RPS} RPS, ${THREADS} threads, ${PAYLOAD} payload" "$SUMMARY_FILE"; then
-                    echo "LoadTest ${RPS} RPS ${THREADS} threads ${PAYLOAD} - SUCCESS" >> "$SUMMARY_FILE"
-                else
-                    echo "LoadTest ${RPS} RPS ${THREADS} threads ${PAYLOAD} - FAILED" >> "$SUMMARY_FILE"
-                fi
-
-                if [ $CURRENT_TEST -lt $TOTAL_TESTS ]; then
-                    print_info "Cooldown (${COOLDOWN} seconds)..."
-                    show_progress $COOLDOWN
-                fi
-            fi
-        done
-    done
-done
-
-if [ "$DRY_RUN" = true ]; then
-    print_header "DRY RUN COMPLETED"
-    print_success "Total tests that would be executed: $TOTAL_TESTS"
-    exit 0
+if run_jmeter_test "$RPS" "$THREADS" "$DURATION" "$PAYLOAD" "loadtest" \
+        "Load test: ${RPS} RPS, ${THREADS} threads, ${PAYLOAD} payload, ${DURATION}s" "$SUMMARY_FILE"; then
+    echo "LoadTest - SUCCESS" >> "$SUMMARY_FILE"
+else
+    echo "LoadTest - FAILED" >> "$SUMMARY_FILE"
 fi
-
-print_header "ALL LOAD TESTS COMPLETED"
 
 {
     echo ""
     echo "Test completed at: $(date)"
-    echo "Total tests run: $TOTAL_TESTS"
     echo ""
     echo "Reports: $RESULTS_DIR/*_summary_*.txt"
     echo "Logs:    $LOG_DIR/*.log"
 } >> "$SUMMARY_FILE"
 
-print_success "All load tests completed!"
+print_header "SCENARIO COMPLETED"
+print_success "Single scenario test completed!"
 print_info "Summary: $SUMMARY_FILE"
 print_info "Results: $RESULTS_DIR"

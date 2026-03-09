@@ -1,9 +1,12 @@
 #!/bin/bash
-# Transformation scenario – performance testing (max single-replica throughput).
+# Single-scenario performance test with per-scenario warmup.
+# Runs one warmup (same payload, 10% of test users) followed by one main load test.
+#
 # Required env vars: DOMAIN, AUTH_HEADER
 # Example:
 #   export DOMAIN="your.domain.com"
 #   export AUTH_HEADER="Bearer your_token"
+#   ./single_scenario_test.sh -u 500 -p 10KB
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../../scripts/common.sh"
@@ -18,37 +21,32 @@ RESULTS_DIR="$SCRIPT_DIR/results/${TIMESTAMP}"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_DURATION=600
-DEFAULT_COOLDOWN=180
-DEFAULT_PAYLOADS=("1KB" "10KB" "50KB" "100KB")
-DEFAULT_USER_COUNTS=(100 200 500 1000)
+DEFAULT_WARMUP_DURATION=120
+WARMUP_COOLDOWN=30
 
-WARMUP_DURATION=180
-WARMUP_USERS=10
-WARMUP_PAYLOAD="1KB"
-
+USERS=""
+PAYLOAD=""
 DURATION=$DEFAULT_DURATION
-COOLDOWN=$DEFAULT_COOLDOWN
-PAYLOADS=("${DEFAULT_PAYLOADS[@]}")
-USER_COUNTS=("${DEFAULT_USER_COUNTS[@]}")
-BACKGROUND_MODE=false
+WARMUP_DURATION=$DEFAULT_WARMUP_DURATION
 DRY_RUN=false
 
 # ── Usage ─────────────────────────────────────────────────────────────────────
 show_usage() {
-    echo "Usage: $0 [OPTIONS]"
+    echo "Usage: $0 -u USERS -p PAYLOAD [OPTIONS]"
+    echo ""
+    echo "Required:"
+    echo "  -u, --users USERS            Number of concurrent users"
+    echo "  -p, --payload PAYLOAD        Payload size (e.g., 1KB, 10KB, 50KB, 100KB)"
     echo ""
     echo "Options:"
-    echo "  -u, --users USER_LIST        Comma-separated list of user counts (e.g., 100,200,500)"
-    echo "  -p, --payloads PAYLOAD_LIST  Comma-separated list of payloads (e.g., 1KB,10KB)"
     echo "  -d, --duration SECONDS       Test duration in seconds (default: $DEFAULT_DURATION)"
-    echo "  -c, --cooldown SECONDS       Cooldown period between tests in seconds (default: $DEFAULT_COOLDOWN)"
-    echo "  -b, --background             Run in background mode (survives SSH disconnection)"
-    echo "  -n, --dry-run                Show test execution order without running tests"
+    echo "  --warmup-duration SECONDS    Warmup duration in seconds (default: $DEFAULT_WARMUP_DURATION)"
+    echo "  -n, --dry-run                Show what would run without executing"
     echo "  -h, --help                   Show this help message"
     echo ""
     echo "Available payloads: 1KB, 10KB, 50KB, 100KB"
-    echo "Default users: ${DEFAULT_USER_COUNTS[*]}"
-    echo "Default duration: $DEFAULT_DURATION seconds"
+    echo ""
+    echo "Warmup: same payload, 10% of test users (minimum 10), ${DEFAULT_WARMUP_DURATION}s"
     exit "${1:-1}"
 }
 
@@ -58,17 +56,16 @@ parse_arguments() {
         case $1 in
             -u|--users)
                 [[ -z "$2" ]] && { print_error "--users requires a value"; show_usage; }
-                IFS=',' read -ra USER_COUNTS <<< "$2"; shift 2 ;;
-            -p|--payloads)
-                [[ -z "$2" ]] && { print_error "--payloads requires a value"; show_usage; }
-                IFS=',' read -ra PAYLOADS <<< "$2"; shift 2 ;;
+                USERS=$2; shift 2 ;;
+            -p|--payload)
+                [[ -z "$2" ]] && { print_error "--payload requires a value"; show_usage; }
+                PAYLOAD=$2; shift 2 ;;
             -d|--duration)
                 [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]] && { print_error "--duration requires a positive integer"; show_usage; }
                 DURATION=$2; shift 2 ;;
-            -c|--cooldown)
-                [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]] && { print_error "--cooldown requires a positive integer"; show_usage; }
-                COOLDOWN=$2; shift 2 ;;
-            -b|--background) BACKGROUND_MODE=true; shift ;;
+            --warmup-duration)
+                [[ -z "$2" || ! "$2" =~ ^[0-9]+$ ]] && { print_error "--warmup-duration requires a positive integer"; show_usage; }
+                WARMUP_DURATION=$2; shift 2 ;;
             -n|--dry-run)    DRY_RUN=true; shift ;;
             -h|--help)       show_usage 0 ;;
             *) print_error "Unknown option: $1"; show_usage ;;
@@ -76,18 +73,12 @@ parse_arguments() {
     done
 }
 
-# ── Payload validation (JSON .json files) ─────────────────────────────────────
-validate_payloads() {
-    local invalid=()
-    for payload in "${PAYLOADS[@]}"; do
-        [[ ! -f "$PAYLOADS_DIR/${payload}.json" ]] && invalid+=("$payload")
-    done
-    if [[ ${#invalid[@]} -gt 0 ]]; then
-        print_error "Invalid payload files: ${invalid[*]}"
-        print_info "Available payloads in $PAYLOADS_DIR:"
-        ls -1 "$PAYLOADS_DIR"/*.json 2>/dev/null | sed "s|$PAYLOADS_DIR/||;s/.json$//" | sed 's/^/  /'
-        exit 1
-    fi
+# ── Warmup user count: 10% of test users, minimum 10 ─────────────────────────
+compute_warmup_users() {
+    local users=$1
+    local warmup=$(( users / 10 ))
+    [[ $warmup -lt 10 ]] && warmup=10
+    echo $warmup
 }
 
 # ── JTL filename helper ───────────────────────────────────────────────────────
@@ -215,36 +206,54 @@ run_jmeter_test() {
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 parse_arguments "$@"
-handle_background_mode "$@"
+
+if [ "$DRY_RUN" = true ]; then
+    print_header "DRY RUN MODE - SINGLE SCENARIO PREVIEW"
+else
+    print_header "SINGLE SCENARIO TEST INITIALIZATION"
+fi
+
+print_info "Validating arguments..."
+
+[[ -z "$USERS" ]]   && { print_error "--users is required";   show_usage; }
+[[ -z "$PAYLOAD" ]] && { print_error "--payload is required"; show_usage; }
+
+validate_positive_integers "user count" "$USERS"
+
+if [[ ! -f "$PAYLOADS_DIR/${PAYLOAD}.json" ]]; then
+    print_error "Payload file not found: ${PAYLOADS_DIR}/${PAYLOAD}.json"
+    print_info "Available payloads:"
+    ls -1 "$PAYLOADS_DIR"/*.json 2>/dev/null | sed "s|$PAYLOADS_DIR/||;s/.json$//" | sed 's/^/  /'
+    exit 1
+fi
+
+WARMUP_USERS=$(compute_warmup_users "$USERS")
+
+print_info "Scenario Configuration:"
+echo -e "  ${CYAN}Users:${NC} $USERS | ${CYAN}Payload:${NC} $PAYLOAD | ${CYAN}Duration:${NC} $DURATION seconds"
+echo -e "  ${CYAN}Warmup Users:${NC} $WARMUP_USERS | ${CYAN}Warmup Duration:${NC} $WARMUP_DURATION seconds | ${CYAN}Warmup Cooldown:${NC} $WARMUP_COOLDOWN seconds"
+echo ""
+
+if [ "$DRY_RUN" = true ]; then
+    print_info "[DRY RUN] Would run warmup:    $WARMUP_USERS users, ${WARMUP_DURATION}s, $PAYLOAD"
+    print_info "[DRY RUN] Would run cooldown:  ${WARMUP_COOLDOWN}s"
+    print_info "[DRY RUN] Would run load test: $USERS users, ${DURATION}s, $PAYLOAD"
+    echo ""
+    print_header "DRY RUN COMPLETED"
+    exit 0
+fi
+
+print_info "Checking environment variables..."
+[[ -z "$DOMAIN" ]]      && { print_error "DOMAIN is not set. Example: export DOMAIN=\"your.domain.com\""; exit 1; }
+[[ -z "$AUTH_HEADER" ]] && { print_error "AUTH_HEADER is not set. Example: export AUTH_HEADER=\"Bearer token\""; exit 1; }
+
+print_info "Checking JMeter installation..."
+[[ ! -f "$JMETER_PATH" ]] && { print_error "JMeter not found at: $JMETER_PATH"; exit 1; }
+[[ ! -f "$TEST_PLAN" ]]   && { print_error "Test plan not found: $TEST_PLAN"; exit 1; }
 
 if ! mkdir -p "$LOG_DIR" "$RESULTS_DIR"; then
     print_error "Failed to create directories $LOG_DIR and $RESULTS_DIR"
     exit 1
-fi
-
-if [ "$DRY_RUN" = true ]; then
-    print_header "DRY RUN MODE - TEST EXECUTION PREVIEW"
-else
-    print_header "LOAD TEST INITIALIZATION"
-fi
-
-print_info "Validating arguments..."
-validate_payloads
-validate_positive_integers "user counts" "${USER_COUNTS[@]}"
-
-print_info "Test Configuration:"
-echo -e "  ${CYAN}Duration:${NC} $DURATION seconds | ${CYAN}Cooldown:${NC} $COOLDOWN seconds"
-echo -e "  ${CYAN}Users:${NC} ${USER_COUNTS[*]} | ${CYAN}Payloads:${NC} ${PAYLOADS[*]}"
-echo ""
-
-if [ "$DRY_RUN" = false ]; then
-    print_info "Checking environment variables..."
-    [[ -z "$DOMAIN" ]] && { print_error "DOMAIN is not set. Example: export DOMAIN=\"your.domain.com\""; exit 1; }
-    [[ -z "$AUTH_HEADER" ]] && { print_error "AUTH_HEADER is not set. Example: export AUTH_HEADER=\"Bearer token\""; exit 1; }
-
-    print_info "Checking JMeter installation..."
-    [[ ! -f "$JMETER_PATH" ]] && { print_error "JMeter not found at: $JMETER_PATH"; exit 1; }
-    [[ ! -f "$TEST_PLAN" ]]   && { print_error "Test plan not found: $TEST_PLAN"; exit 1; }
 fi
 
 print_success "Validation completed"
@@ -252,82 +261,47 @@ echo ""
 
 SUMMARY_FILE="${RESULTS_DIR}/test_summary_${TIMESTAMP}.txt"
 {
-    echo "Load Test Summary - $(date)"
+    echo "Single Scenario Test Summary - $(date)"
     echo "Domain: $DOMAIN"
-    echo "Duration: $DURATION seconds | Cooldown: $COOLDOWN seconds"
-    echo "Users: ${USER_COUNTS[*]} | Payloads: ${PAYLOADS[*]}"
-    echo "Warmup: $WARMUP_USERS users for $WARMUP_DURATION seconds"
+    echo "Users: $USERS | Payload: $PAYLOAD | Duration: $DURATION seconds"
+    echo "Warmup: $WARMUP_USERS users for $WARMUP_DURATION seconds (same payload)"
     echo "==========================================="
     echo ""
 } > "$SUMMARY_FILE"
 
-TOTAL_TESTS=$((${#PAYLOADS[@]} * ${#USER_COUNTS[@]} + 1))
-CURRENT_TEST=0
-
 # ── Warmup ────────────────────────────────────────────────────────────────────
-print_header "STARTING WARMUP RUN"
-CURRENT_TEST=$((CURRENT_TEST + 1))
-echo -e "${PURPLE}Test $CURRENT_TEST of $TOTAL_TESTS${NC}"
+print_header "WARMUP"
 
-if [ "$DRY_RUN" = true ]; then
-    print_info "[DRY RUN] Would run warmup: $WARMUP_USERS users, ${WARMUP_DURATION}s, $WARMUP_PAYLOAD"
-    echo ""
+if run_jmeter_test "$WARMUP_USERS" "$WARMUP_DURATION" "$PAYLOAD" "warmup" \
+        "Warmup: ${WARMUP_USERS} users for ${WARMUP_DURATION}s with ${PAYLOAD} payload" "$SUMMARY_FILE"; then
+    echo "Warmup - SUCCESS" >> "$SUMMARY_FILE"
 else
-    if run_jmeter_test "$WARMUP_USERS" "$WARMUP_DURATION" "$WARMUP_PAYLOAD" "warmup" \
-            "Warmup run with ${WARMUP_USERS} users for ${WARMUP_DURATION} seconds" "$SUMMARY_FILE"; then
-        echo "Warmup - SUCCESS" >> "$SUMMARY_FILE"
-        print_info "Warmup cooldown (30 seconds)..."
-        show_progress 30
-    else
-        echo "Warmup - FAILED" >> "$SUMMARY_FILE"
-        print_warning "Warmup failed, continuing with main tests..."
-    fi
+    echo "Warmup - FAILED" >> "$SUMMARY_FILE"
+    print_warning "Warmup failed, continuing with main test..."
 fi
 
-# ── Main load tests ───────────────────────────────────────────────────────────
-print_header "STARTING MAIN LOAD TESTS"
+print_info "Warmup cooldown (${WARMUP_COOLDOWN} seconds)..."
+show_progress $WARMUP_COOLDOWN
 
-for PAYLOAD in "${PAYLOADS[@]}"; do
-    for USERS in "${USER_COUNTS[@]}"; do
-        CURRENT_TEST=$((CURRENT_TEST + 1))
-        echo -e "${PURPLE}Test $CURRENT_TEST of $TOTAL_TESTS${NC}"
+# ── Main load test ────────────────────────────────────────────────────────────
+print_header "MAIN LOAD TEST"
 
-        if [ "$DRY_RUN" = true ]; then
-            print_info "[DRY RUN] Would run: $USERS users, ${DURATION}s, $PAYLOAD"
-            echo ""
-        else
-            if run_jmeter_test "$USERS" "$DURATION" "$PAYLOAD" "loadtest" \
-                    "Load test with ${USERS} users and ${PAYLOAD} payload" "$SUMMARY_FILE"; then
-                echo "LoadTest ${USERS} users ${PAYLOAD} - SUCCESS" >> "$SUMMARY_FILE"
-            else
-                echo "LoadTest ${USERS} users ${PAYLOAD} - FAILED" >> "$SUMMARY_FILE"
-            fi
-
-            if [ $CURRENT_TEST -lt $TOTAL_TESTS ]; then
-                print_info "Cooldown (${COOLDOWN} seconds)..."
-                show_progress $COOLDOWN
-            fi
-        fi
-    done
-done
-
-if [ "$DRY_RUN" = true ]; then
-    print_header "DRY RUN COMPLETED"
-    print_success "Total tests that would be executed: $TOTAL_TESTS"
-    exit 0
+if run_jmeter_test "$USERS" "$DURATION" "$PAYLOAD" "loadtest" \
+        "Load test: ${USERS} users, ${PAYLOAD} payload, ${DURATION}s" "$SUMMARY_FILE"; then
+    echo "LoadTest - SUCCESS" >> "$SUMMARY_FILE"
+else
+    echo "LoadTest - FAILED" >> "$SUMMARY_FILE"
 fi
-
-print_header "ALL LOAD TESTS COMPLETED"
 
 {
     echo ""
     echo "Test completed at: $(date)"
-    echo "Total tests run: $TOTAL_TESTS"
     echo ""
     echo "Reports: $RESULTS_DIR/*_summary_*.txt"
     echo "Logs:    $LOG_DIR/*.log"
 } >> "$SUMMARY_FILE"
 
-print_success "All load tests completed!"
+print_header "SCENARIO COMPLETED"
+print_success "Single scenario test completed!"
 print_info "Summary: $SUMMARY_FILE"
 print_info "Results: $RESULTS_DIR"
