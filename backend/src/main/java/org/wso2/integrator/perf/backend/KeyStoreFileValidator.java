@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package lk.avix.http;
+package org.wso2.integrator.perf.backend;
 
 import com.beust.jcommander.IValueValidator;
 import com.beust.jcommander.ParameterException;

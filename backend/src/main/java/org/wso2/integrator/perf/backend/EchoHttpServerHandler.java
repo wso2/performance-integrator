@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package lk.avix.http;
+package org.wso2.integrator.perf.backend;
 
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
