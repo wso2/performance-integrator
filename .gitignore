@@ -22,3 +22,52 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# Maven / Java
+target/
+*.class
+dependency-reduced-pom.xml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Ballerina
+.ballerina/
+
+# JMeter outputs
+*.jtl
+scripts/logs/
+scripts/results/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Shell
+nohup.out
+*.log
+
+# Certificates
+*.pem
+
+# Generated files
+captacity-planning/*/scripts/logs/
+captacity-planning/*/scripts/results/
+captacity-planning/*/scripts/load_test_background.pid
+performance-testing/*/scripts/logs/
+performance-testing/*/scripts/results/
+performance-testing/*/scripts/load_test_background.pid
+
+# Claude files
+CLAUDE.md
+CONTEXT.md

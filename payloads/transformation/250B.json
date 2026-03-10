@@ -1,0 +1,1 @@
+{"payload":{"orderId":"ORD-20240115-002","status":"PROCESSING","currency":"USD","totalAmount":49.99,"createdAt":"2024-01-15T10:30:00Z","customer":{"id":"CUST-001","firstName":"Jane","lastName":"Smith","email":"jane@example.com","phone":"+15550199"}}}
