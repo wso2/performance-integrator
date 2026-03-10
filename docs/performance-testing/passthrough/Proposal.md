@@ -42,7 +42,10 @@ This document describes the methodology for measuring the **maximum achievable t
 | ----------- | ------- |
 | Server | Netty HTTP echo service v0.4.6-SNAPSHOT |
 | Port | 8688 |
-| Instance type | t2.large or larger |
+| HTTP version | HTTP/1.1 (`--http2` disabled) |
+| TLS | Disabled — plaintext HTTP (`--ssl` disabled) |
+| Connection behavior | Keep-alive enabled: TCP `SO_KEEPALIVE=true`; application-level `Connection: keep-alive` honored per request |
+| Instance type | c5.large or larger (fixed-performance; avoid burstable t2/t3 families — CPU credit throttling skews sustained-throughput results) |
 | Endpoint | `http://<BACKEND_IP>:8688/service/EchoService` |
 | Behavior | Returns request body verbatim |
 
@@ -133,10 +136,20 @@ export JVM_ARGS="-Xms4g -Xmx8g -XX:MaxMetaspaceSize=512m -Xss256k -XX:+UseG1GC -
 | ----------- | ----------- |
 | Error rate | < 1% |
 | Throughput | Record achieved RPS at stable state |
-| CPU utilisation | Record % at peak load |
-| Memory utilisation | Record % at peak load |
+| CPU utilisation (replica) | Record % at peak load |
+| Memory utilisation (replica) | Record % at peak load |
+| JMeter CPU | < 75% — run invalid if exceeded |
+| JMeter memory | < 75% — run invalid if exceeded |
+| JMeter network | < 75% of NIC capacity — run invalid if exceeded |
+| JMeter GC pause | < 500 ms cumulative per minute — run invalid if exceeded |
+| Backend CPU | < 75% — run invalid if exceeded |
+| Backend memory | < 75% — run invalid if exceeded |
+| Backend network | < 75% of NIC capacity — run invalid if exceeded |
+| Backend GC pause | < 200 ms cumulative per minute — run invalid if exceeded |
 
 There is no minimum RPS threshold — the goal is to record the ceiling, not pass/fail against a target.
+
+If any auxiliary host threshold (JMeter or backend) is exceeded the measured `throughput_rps` is considered invalid and the run must be repeated with a less loaded or larger auxiliary host.
 
 ## Metrics to Capture
 
@@ -154,6 +167,14 @@ Each test run produces one row in the results matrix:
 | `error_pct` | Error rate as a percentage |
 | `cpu_pct` | Peak CPU utilisation of the replica |
 | `mem_pct` | Peak memory utilisation of the replica |
+| `jmeter_cpu_pct` | Peak CPU utilisation of the JMeter host |
+| `jmeter_mem_pct` | Peak memory utilisation of the JMeter host |
+| `jmeter_net_mbps` | Peak network throughput of the JMeter host (Mbps) |
+| `jmeter_gc_ms` | Cumulative JMeter GC pause time per minute (ms) |
+| `backend_cpu_pct` | Peak CPU utilisation of the Netty backend host |
+| `backend_mem_pct` | Peak memory utilisation of the Netty backend host |
+| `backend_net_mbps` | Peak network throughput of the Netty backend host (Mbps) |
+| `backend_gc_ms` | N/A (Netty backend has no JVM GC; record `—`) |
 
 ## Deliverables
 

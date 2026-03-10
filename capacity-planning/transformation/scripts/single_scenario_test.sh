@@ -300,11 +300,14 @@ show_progress $WARMUP_COOLDOWN
 # ── Main load test ────────────────────────────────────────────────────────────
 print_header "MAIN LOAD TEST"
 
-if run_jmeter_test "$RPS" "$THREADS" "$DURATION" "$PAYLOAD" "loadtest" \
-        "Load test: ${RPS} RPS, ${THREADS} threads, ${PAYLOAD} payload, ${DURATION}s" "$SUMMARY_FILE"; then
+run_jmeter_test "$RPS" "$THREADS" "$DURATION" "$PAYLOAD" "loadtest" \
+        "Load test: ${RPS} RPS, ${THREADS} threads, ${PAYLOAD} payload, ${DURATION}s" "$SUMMARY_FILE"
+status=$?
+if [ $status -eq 0 ]; then
     echo "LoadTest - SUCCESS" >> "$SUMMARY_FILE"
 else
     echo "LoadTest - FAILED" >> "$SUMMARY_FILE"
+    exit $status
 fi
 
 {

@@ -254,6 +254,7 @@ run_jmeter_test() {
 # ── State file helpers ────────────────────────────────────────────────────────
 write_state() {
     local current=$1
+    local phase=${2:-running}
     {
         echo "FIFO_PATH=${RESUME_PIPE}"
         echo "PID=$$"
@@ -261,6 +262,7 @@ write_state() {
         echo "TOTAL=${TOTAL_SCENARIOS}"
         echo "TIMESTAMP=${TIMESTAMP}"
         echo "RESULTS_DIR=${RESULTS_DIR}"
+        echo "PHASE=${phase}"
     } > "$STATE_FILE"
 }
 
@@ -283,15 +285,22 @@ handle_resume() {
         exit 1
     fi
 
-    local fifo_path pid current total
+    local fifo_path pid current total phase
     fifo_path=$(read_state_field "FIFO_PATH")
     pid=$(read_state_field "PID")
     current=$(read_state_field "CURRENT")
     total=$(read_state_field "TOTAL")
+    phase=$(read_state_field "PHASE")
 
     if ! ps -p "$pid" > /dev/null 2>&1; then
         print_error "Background process (PID: $pid) is no longer running."
         rm -f "$STATE_FILE"
+        exit 1
+    fi
+
+    if [[ "$phase" != "waiting" ]]; then
+        print_error "Background process (PID: $pid) is not at a pause point (phase: ${phase:-unknown})."
+        print_info "Wait until the current scenario finishes and the process pauses, then retry --resume."
         exit 1
     fi
 
@@ -303,8 +312,11 @@ handle_resume() {
     fi
 
     print_info "Resuming background interactive test (scenario $current of $total)..."
-    print_info "Sending resume signal (will block briefly until the process is ready)..."
-    echo "resume" > "$fifo_path"
+    if ! timeout 5 bash -c "echo resume > \"$fifo_path\"" 2>/dev/null; then
+        print_error "Timed out sending resume signal — the background process did not read it within 5 s."
+        print_info "Check the log: tail -f \$(ls -t ${SCRIPT_DIR}/interactive_test_background_*.log | head -1)"
+        exit 1
+    fi
     print_success "Signal sent. Background test is now starting the next scenario."
     print_info "Monitor with: tail -f \$(ls -t ${SCRIPT_DIR}/interactive_test_background_*.log | head -1)"
     exit 0
@@ -322,11 +334,12 @@ pause_for_restart() {
     echo -e "${YELLOW}  clean JVM state for the next scenario.${NC}"
 
     if [ "$BACKGROUND_MODE" = true ]; then
-        write_state "$current"
+        write_state "$current" "waiting"
         echo -e "${CYAN}  When ready, run:${NC} ./interactive_test.sh --resume"
         echo -e "${BLUE}================================================${NC}"
         echo ""
         read -r < "$RESUME_PIPE"
+        write_state "$current" "running"
         print_info "Resumed. Starting next scenario..."
     else
         echo -e "${CYAN}  When ready, press Enter to continue...${NC}"
@@ -446,6 +459,7 @@ fi
 
 # ── Scenario loop ─────────────────────────────────────────────────────────────
 CURRENT_SCENARIO=0
+TEST_FAILED=0
 
 for PAYLOAD in "${PAYLOADS[@]}"; do
     for RPS in "${RPS_TARGETS[@]}"; do
@@ -475,6 +489,7 @@ for PAYLOAD in "${PAYLOADS[@]}"; do
                 echo "Scenario $CURRENT_SCENARIO LoadTest ${RPS} RPS ${THREADS} threads ${PAYLOAD} - SUCCESS" >> "$SUMMARY_FILE"
             else
                 echo "Scenario $CURRENT_SCENARIO LoadTest ${RPS} RPS ${THREADS} threads ${PAYLOAD} - FAILED" >> "$SUMMARY_FILE"
+                TEST_FAILED=1
             fi
 
             # ── Pause for service restart (skip after last scenario) ──────────
@@ -499,3 +514,5 @@ print_header "ALL SCENARIOS COMPLETED"
 print_success "All interactive scenarios completed!"
 print_info "Summary: $SUMMARY_FILE"
 print_info "Results: $RESULTS_DIR"
+
+exit $TEST_FAILED

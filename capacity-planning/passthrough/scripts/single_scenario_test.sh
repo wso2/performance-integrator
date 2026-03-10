@@ -304,7 +304,9 @@ if run_jmeter_test "$RPS" "$THREADS" "$DURATION" "$PAYLOAD" "loadtest" \
         "Load test: ${RPS} RPS, ${THREADS} threads, ${PAYLOAD} payload, ${DURATION}s" "$SUMMARY_FILE"; then
     echo "LoadTest - SUCCESS" >> "$SUMMARY_FILE"
 else
+    LOAD_TEST_EXIT=$?
     echo "LoadTest - FAILED" >> "$SUMMARY_FILE"
+    exit $LOAD_TEST_EXIT
 fi
 
 {

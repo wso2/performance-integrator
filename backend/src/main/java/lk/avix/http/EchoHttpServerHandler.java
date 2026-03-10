@@ -41,7 +41,11 @@ public class EchoHttpServerHandler extends SimpleChannelInboundHandler<FullHttpR
             String streamId = request.headers().get(HttpConversionUtil.ExtensionHeaderNames.STREAM_ID.text());
             FullHttpResponse response = buildFullHttpResponse(request);
             response.headers().set(HttpConversionUtil.ExtensionHeaderNames.STREAM_ID.text(), streamId);
-            ctx.writeAndFlush(response);
+            if (sleepTime > 0) {
+                ctx.executor().schedule(() -> ctx.writeAndFlush(response), sleepTime, TimeUnit.MILLISECONDS);
+            } else {
+                ctx.writeAndFlush(response);
+            }
         } else {
             // Decide whether to close the connection or not
             boolean keepAlive = HttpUtil.isKeepAlive(request);

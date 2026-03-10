@@ -107,8 +107,8 @@
     </dependencies>
 
     <properties>
-        <netty.version>4.1.97.Final</netty.version>
-        <netty-tcnative-boringssl-static.version>2.0.56.Final</netty-tcnative-boringssl-static.version>
+        <netty.version>4.1.124.Final</netty.version>
+        <netty-tcnative-boringssl-static.version>2.0.72.Final</netty-tcnative-boringssl-static.version>
         <slf4j.version>2.0.9</slf4j.version>
         <jcommander.version>1.82</jcommander.version>
         <java.version>21</java.version>

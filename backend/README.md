@@ -23,13 +23,13 @@ This repository holds the HTTP echo service implemented using [Netty](https://gi
 2. Run the application using the following command:
 
    ```shell
-   java -jar target/netty-http-echo-service.jar --ssl true --http2 false --key-store-file keystore.p12 --key-store-password ballerina
+   java -jar target/netty-http-echo-service.jar --ssl false --http2 false
    ```
 
-   > **Note:** The `--ssl` flag is used to enable SSL, the `--http2` flag is used to enable HTTP/2, the `--key-store-file` flag is used to specify the keystore file, and the `--key-store-password` flag is used to specify the keystore password.
+   > **Note:** The `--ssl` flag enables SSL (disabled here so the Ballerina scenario services can connect via plain HTTP). The `--http2` flag enables HTTP/2.
 
 3. The application will start on port 8688. Test it using the following command:
 
    ```shell
-   curl -kv https://localhost:8688 -d "Hello Netty"
+   curl -v http://localhost:8688/service/EchoService -d "Hello Netty"
    ```

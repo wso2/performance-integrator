@@ -1,6 +1,7 @@
 """
 Generate 10 performance report charts for the integrator capacity planning.
 """
+import os
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -31,7 +32,7 @@ PAYLOADS = ["1KB", "10KB", "50KB", "100KB", "250KB", "1MB"]
 NA   = 'N/A'
 DASH = '-'
 
-OUTPUT_DIR = "/Users/tharmigan/Documents/github/TharmiganK/integrator-performance/capacity-planning/passthrough/reports/images/"
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "reports", "images")
 
 # Payloads tested per RPS
 TESTED_PAYLOADS = {
@@ -319,7 +320,7 @@ def make_bar_chart(rps, data, img_num):
     )
     fig.tight_layout(rect=[0, 0, 1, 0.93])
 
-    out = f"{OUTPUT_DIR}image{img_num}.png"
+    out = os.path.join(OUTPUT_DIR, f"image{img_num}.png")
     fig.savefig(out, dpi=200, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {out}")
@@ -407,7 +408,7 @@ def make_heatmap(data, img_num):
     )
     fig.tight_layout(rect=[0, 0, 1, 0.93])
 
-    out = f"{OUTPUT_DIR}image{img_num}.png"
+    out = os.path.join(OUTPUT_DIR, f"image{img_num}.png")
     fig.savefig(out, dpi=200, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {out}")
@@ -467,7 +468,7 @@ def make_line_chart(data, img_num):
     )
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
-    out = f"{OUTPUT_DIR}image{img_num}.png"
+    out = os.path.join(OUTPUT_DIR, f"image{img_num}.png")
     fig.savefig(out, dpi=200, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {out}")
@@ -485,14 +486,19 @@ def make_users_bar_chart(img_num):
     offsets = (np.arange(n) - (n - 1) / 2) * bar_width
     tab10 = plt.cm.tab10.colors
 
+    data = build_data()
+
     fig, ax = plt.subplots(figsize=(12, 5))
     x = np.arange(len(USERS))
 
     for r_idx, rps in enumerate(rps_list):
         heights = []
         for u in USERS:
-            # Treat NA as 1.0 per spec
-            heights.append(1.0)
+            cell = data[rps][u][p][c]
+            if cell in (NA, DASH, None):
+                heights.append(np.nan)
+            else:
+                heights.append(float(cell))
 
         ax.bar(
             x + offsets[r_idx],
@@ -515,7 +521,7 @@ def make_users_bar_chart(img_num):
     )
     ax.legend(fontsize=9)
 
-    out = f"{OUTPUT_DIR}image{img_num}.png"
+    out = os.path.join(OUTPUT_DIR, f"image{img_num}.png")
     fig.savefig(out, dpi=200, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {out}")

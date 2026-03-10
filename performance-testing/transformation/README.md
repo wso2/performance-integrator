@@ -96,11 +96,13 @@ Runs the full `-u`/`-p` matrix. Each scenario gets its own warmup (120s) + 30s c
 ./scripts/interactive_test.sh --background [OPTIONS]
 ```
 
-**Resume a background run after SSH reconnection:**
+**Resume a paused background run after a service restart or system reboot:**
 
 ```bash
 ./scripts/interactive_test.sh --resume
 ```
+
+> **Note:** `--resume` is for post-restart recovery — use it after restarting the integration service (or recovering from a crash/reboot) to signal the waiting background process to continue. Simply reconnecting an SSH session does not require `--resume`; the background process continues on its own after reconnection.
 
 **Monitor background progress:**
 

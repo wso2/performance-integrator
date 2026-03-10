@@ -119,8 +119,10 @@ Tests target fixed constant throughput levels (stress testing, not open-loop):
 Not all combinations of throughput × concurrency × payload are valid. The AWS instance's maximum network bandwidth imposes the constraint:
 
 ```equation
-throughput × concurrent_users × payload_size < 10 Gbps
+request_rate (RPS) × payload_size (bytes) < 10 Gbps
 ```
+
+`payload_size` is in bytes (e.g., 1 KB = 1 024 B). Protocol overhead (HTTP/1.1 headers, ~200–500 B per request) should be added as a margin. Concurrent user count does not appear in the bandwidth formula — bandwidth is determined by the aggregate data rate (RPS × payload), not the parallelism level.
 
 Combinations exceeding this limit are excluded from the matrix.
 

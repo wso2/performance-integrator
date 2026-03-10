@@ -122,7 +122,7 @@ Each scenario (combination of users and payload) gets its own dedicated warmup b
 | Parameter | Value |
 | ----------- | ------- |
 | Duration | 10 minutes (600 s) |
-| Users | Per configuration (100 or 1000) |
+| Users | Per configuration (100, 200, 500, or 1000) |
 | Payload | Per configuration |
 | Ramp-up | 30 s |
 

@@ -40,9 +40,9 @@ This capacity planning report presents a comprehensive analysis of the WSO2 Inte
    - **250KB payloads**: Achievable up to 200 RPS with ≥0.5 CPU; limited at higher throughput  
    - **1MB payloads**: Most constrained; achievable at ≤100 RPS with ≥0.5 CPU and ≥50 users; at 50 RPS, 0.2 CPU requires 2 replicas
 
-3. **Concurrency Requirements by Little's Law**: Low concurrent user counts with high latency cannot achieve target throughput due to Little's Law constraint:  
+3. **Concurrency Requirements by Little's Law**: Low concurrent user counts with high latency cannot achieve target throughput due to Little's Law constraint:
 
-   - **Average Effective Throughput \= Concurrent Users / Average Latency**  
+   - **Average Effective Throughput (RPS) \= Concurrent Users × 1000 / Average Latency (ms)**
    - N/A results indicate scenarios where latency is too high for the given user count to achieve target throughput  
    - 10 users consistently fails at ≥200 RPS and for 1MB payloads at any throughput
 
@@ -55,7 +55,7 @@ This capacity planning report presents a comprehensive analysis of the WSO2 Inte
 5. **Memory Usage Observations**: Memory utilization was monitored across all configurations:  
 
    - When minimum replicas are found, there is no memory saturation observed  
-   - **256MB was sufficient** for this passthrough service across all test scenarios  
+   - **512MB was sufficient** for this passthrough service across all test scenarios (the tested configurations were 512MB and 1GB; no 256MB configuration was evaluated)  
    - Since this is a passthrough service, memory usage did not change significantly with different input metrics (payload size, throughput, concurrency)
 
 6. **Latency as Primary Bottleneck**: When target throughput is not achievable (N/A results):  
@@ -118,13 +118,15 @@ This version transitions from a **load testing** methodology to a **stress testi
 
 **Matrix Selection Criteria:** Test combinations are constrained by the AWS instance's maximum network bandwidth:
 
-`throughput × concurrent_users × payload_size < 10 Gbps`
+`throughput (RPS) × payload_size (bytes) × 8 < 10 Gbps`
+
+`concurrent_users` does not appear in the bandwidth constraint — network load is determined by the aggregate data rate (RPS × payload), not the parallelism level. The `× 8` converts bytes to bits.
 
 ### N/A Results Explanation
 
 **N/A (Not Achievable)** in results indicates that the target throughput cannot be achieved due to latency constraints, governed by Little's Law:
 
-**Average Effective Throughput \= Concurrent Users / Average Latency**
+**Average Effective Throughput (RPS) \= Concurrent Users × 1000 / Average Latency (ms)**
 
 When latency is high enough, the maximum achievable throughput is limited by the number of concurrent users, regardless of backend capacity. This is a client-side constraint, not a server-side limitation. See [Latency Analysis](#latency-analysis) for measured values and theoretical throughput calculations per configuration.
 
@@ -400,7 +402,7 @@ The following charts visualise latency measurements recorded under conditions wi
 
 | Throughput Target | Payload Size | Recommended CPU | Recommended Memory | Expected Replicas | Min Concurrent Users |
 | ----: | ----: | ----: | ----: | ----: | ----: |
-| ≤ 50 RPS | ≤1MB | 0.2 | 512MB | 1 | 50 |
+| ≤ 50 RPS | ≤250KB | 0.2 | 512MB | 1 | 50 |
 | ≤ 100 RPS | ≤100KB | 0.2 | 512MB | 1 | 10 |
 | ≤ 100 RPS | 250KB | 0.5 | 1GB | 1 | 50 |
 | ≤ 100 RPS | 1MB | 1.0 | 1GB | 1 | 50 |
@@ -429,7 +431,7 @@ The following charts visualise latency measurements recorded under conditions wi
 
 Little's Law governs the minimum concurrent users needed:
 
-**Required Concurrent Users \= Target Throughput × Expected Latency**
+**Required Concurrent Users \= Target Throughput (RPS) × Expected Latency (ms) / 1000**
 
 Based on test results:
 
@@ -530,7 +532,7 @@ Based on test results:
 **Note**:
 
 - *N/A* indicates that the target throughput cannot be achieved due to latency constraints (Little's Law). The latency is high enough that the specific concurrent users cannot achieve the target throughput.  
-- **Little's Law Constraint**: Average Effective Throughput \= Concurrent Users / Average Latency
+- **Little's Law Constraint**: Average Effective Throughput (RPS) = Concurrent Users × 1000 / Average Latency (ms)
 
 ### 50 RPS Results
 
@@ -1076,7 +1078,12 @@ Based on test results:
 | 500 | 10KB | 0.5 | 1024 | 1 |
 | 500 | 10KB | 1 | 1024 | 1 |
 | 500 | 10KB | 2 | 1024 | 1 |
-| All | 50KB+ | All | All | N/A |
+| 10-200 | 50KB | All | All | N/A |
+| 500 | 50KB | 0.2 | 512 | 1 |
+| 500 | 50KB | 0.5 | 1024 | 1 |
+| 500 | 50KB | 1 | 1024 | 1 |
+| 500 | 50KB | 2 | 1024 | 1 |
+| All | 100KB+ | All | All | N/A |
 
 ### 2000 RPS Results
 
