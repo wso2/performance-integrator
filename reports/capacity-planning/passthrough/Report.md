@@ -48,7 +48,7 @@ This capacity planning report presents a comprehensive analysis of the WSO2 Inte
 
 4. **High Throughput Limitations**: Throughput levels ≥1000 RPS show significant limitations:  
 
-   - 1000 RPS: Only achievable with small payloads (≤10KB) and high concurrency (≥100-200 users)  
+   - 1000 RPS: Achievable with small payloads (≤10KB) at ≥100-200 users, and 50KB at 500 users
    - 2000 RPS: Achievable with 1KB (≥200 users) and 10KB-50KB (500 users only)  
    - 5000 RPS: Achievable only with 1KB payload and 500 concurrent users
 
@@ -224,7 +224,8 @@ The following charts visualise latency measurements recorded under conditions wi
 - **50 users**: All payloads show N/A - insufficient concurrency to achieve 1000 RPS  
 - **100 users**: Only 1KB payloads achievable; requires 3 replicas for 0.2 CPU, single replica for ≥0.5 CPU  
 - **200+ users**: 1KB and 10KB payloads achievable; 0.2 CPU needs 3 replicas, ≥0.5 CPU achieves single replica  
-- 50KB and larger payloads: Not achievable at 1000 RPS due to latency constraints
+- 50KB payloads: Achievable at 1000 RPS with 500 concurrent users; consistent with 2000 RPS test results
+- 100KB and larger payloads: Not achievable at 1000 RPS due to latency constraints
 
 ---
 
@@ -263,7 +264,7 @@ The following charts visualise latency measurements recorded under conditions wi
 
 - **White zones (1 replica)**: Dominate for lower throughput (50-200 RPS) across most payload sizes  
 - **Blue zones (2-4 replicas)**: Appear primarily at higher throughput with larger payloads or low CPU configurations  
-- **N/A zones**: Concentrate at 1000 RPS with payloads ≥50KB, indicating latency limitations  
+- **N/A zones**: Concentrate at 1000 RPS with payloads ≥100KB, indicating latency limitations
 - **Configuration efficiency**: 0.5 CPU / 1GB provides the best balance - achieving single replica for most scenarios where 0.2 CPU requires scaling  
 - **Payload threshold at 1000 RPS**: Clear boundary where only 1KB and 10KB payloads remain achievable
 
@@ -363,7 +364,7 @@ The following charts visualise latency measurements recorded under conditions wi
 **Performance Characteristics:**
 
 - Severely constrained by concurrency and latency limitations
-- Only small payloads (≤10KB) with high concurrency (≥100 users) succeed
+- Small payloads (≤10KB) achievable with ≥100 users; 50KB achievable with 500 users
 - Most test scenarios show N/A results
 - **Root Cause**: Combination of network latency and Little's Law constraints limits effective throughput
 
@@ -407,7 +408,8 @@ The following charts visualise latency measurements recorded under conditions wi
 | 101-200 RPS | 250KB | 0.5 | 1GB | 1 | 50 |
 | 201-500 RPS | ≤10KB | 0.5 | 1GB | 1 | 50 |
 | 201-500 RPS | 50KB | 1.0 | 1GB | 1 | 50 |
-| 500-1000 RPS | ≤10KB | 1.0 | 1GB | 1 | 100-200 |
+| 500-1000 RPS | ≤10KB | 0.5 | 1GB | 1 | 100-200 |
+| 500-1000 RPS | 50KB | 1.0 | 1GB | 1 | 500 |
 | 1000-2000 RPS | 1KB | 0.5 | 1GB | 1 | 200 |
 | 1000-2000 RPS | 10KB-50KB | 0.5 | 1GB | 1 | 500 |
 | 2000-5000 RPS | 1KB | 0.5 | 1GB | 1 | 500 |

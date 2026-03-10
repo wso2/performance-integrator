@@ -25,7 +25,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 # Paths
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(SCRIPT_DIR, "..", "docs", "images")
+OUT = os.path.join(SCRIPT_DIR, "..", "..", "..", "docs", "capacity-planning", "passthrough", "images")
 
 # ---------------------------------------------------------------------------
 # Style
@@ -142,9 +142,9 @@ def make_resource_heatmap():
     # Cols: target RPS   (50, 100, 200, 500, 1 000, 2 000, 5 000)
     rps_labels = ["50", "100", "200", "500", "1 000", "2 000", "5 000"]
     matrix = np.array([
-        [1, 1, 2, 2, 3, 2, 2],  # 1 KB
-        [1, 1, 2, 2, 3, 2, 0],  # 10 KB
-        [1, 1, 2, 3, 0, 2, 0],  # 50 KB
+        [1, 1, 2, 2, 2, 2, 2],  # 1 KB  — 1000 RPS: 1.0→0.5 vCPU (analysis says ≥0.5 sufficient)
+        [1, 1, 2, 2, 2, 2, 0],  # 10 KB — 1000 RPS: 1.0→0.5 vCPU (same reason)
+        [1, 1, 2, 3, 3, 2, 0],  # 50 KB — 1000 RPS: N/A→1.0 vCPU (achievable if 2000 RPS is)
         [1, 1, 2, 3, 0, 0, 0],  # 100 KB
         [1, 2, 2, 0, 0, 0, 0],  # 250 KB
         [2, 3, 0, 0, 0, 0, 0],  # 1 MB

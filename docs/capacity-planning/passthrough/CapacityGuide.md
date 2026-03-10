@@ -94,8 +94,9 @@ Select the row that best matches your target throughput and payload size. All co
 | 201–500 RPS       | 50 KB        | 1.0 vCPU        | 1 GB               | 1                 |
 | 201–500 RPS       | 100 KB       | 1.0 vCPU        | 1 GB               | 1                 |
 | 201–500 RPS       | 250 KB+      | Not achievable  | —                  | —                 |
-| 501–1000 RPS      | Up to 10 KB  | 1.0 vCPU        | 1 GB               | 1                 |
-| 501–1000 RPS      | 50 KB+       | Not achievable  | —                  | —                 |
+| 501–1000 RPS      | Up to 10 KB  | 0.5 vCPU        | 1 GB               | 1                 |
+| 501–1000 RPS      | 50 KB        | 1.0 vCPU        | 1 GB               | 1                 |
+| 501–1000 RPS      | 100 KB+      | Not achievable  | —                  | —                 |
 | 1001–2000 RPS     | 1 KB         | 0.5 vCPU        | 1 GB               | 1                 |
 | 1001–2000 RPS     | 10–50 KB     | 0.5 vCPU        | 1 GB               | 1                 |
 | 1001–2000 RPS     | 100 KB+      | Not achievable  | —                  | —                 |
