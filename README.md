@@ -1,6 +1,6 @@
 # WSO2 Integrator Performance
 
-Centralized performance testing and capacity planning for WSO2 Integrator running on the WSO2 Integration Platform Private Data Plane (PDP).
+Central repository for performance benchmarking, testing frameworks, results, and capacity planning guidance for WSO2 Integration Platform.
 
 ## Table of Contents
 
