@@ -63,7 +63,7 @@ The backend instance must be in the **same VPC** as the PDP to minimise network 
 
 | Parameter | Value |
 | ----------- | ------- |
-| Product | WSO2 Integrator: BI (Ballerina 2202.13.1 — Swan Lake Update 13) |
+| Product | WSO2 Integrator: BI (Ballerina 2201.13.1 — Swan Lake Update 13) |
 | Service | Ballerina HTTP passthrough |
 | Scale-to-zero | Disabled |
 | Endpoint authentication | Enabled |

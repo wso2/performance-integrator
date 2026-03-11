@@ -2,7 +2,7 @@
 
 **Scenario:** HTTP Passthrough \
 **Product:** WSO2 Integrator: BI \
-**Product Version:** Ballerina 2202.13.1 (Swan Lake Update 13) \
+**Product Version:** Ballerina 2201.13.1 (Swan Lake Update 13) \
 **Date:** 2026-03-03
 
 ---
