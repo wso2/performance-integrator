@@ -1,12 +1,12 @@
 # WSO2 Integrator Performance
 
-Centralized performance testing and capacity planning for WSO2 Integrator running on the WSO2 Integration Platform Private Data Plane (PDP).
+Central repository for performance benchmarking, testing frameworks, results, and capacity planning guidance for WSO2 Integration Platform.
 
 ## Table of Contents
 
 - [Repository Structure](#repository-structure)
-- [Prerequisites](#prerequisites)
 - [Testing Categories](#testing-categories)
+- [Documentation](#documentation)
 
 ## Repository Structure
 
@@ -48,14 +48,6 @@ integrator-performance/
         └── scripts/                     # JMeter test scripts and runners
 ```
 
-## Prerequisites
-
-- **Apache JMeter 5.6.3+** — with JVM heap set to at least 4–8 GB (`-Xms4g -Xmx8g`)
-- **Java 21** — required for JMeter
-- **Ballerina 2201.13.1** (Swan Lake Update 13) — for building the integration service
-- **AWS EC2** — JMeter client instance and Netty backend instance in the same VPC as the PDP
-- **WSO2 Integration Platform PDP** — a configured Private Data Plane with an active component deployment
-
 ## Testing Categories
 
 | Category | Goal | Location |
@@ -64,3 +56,12 @@ integrator-performance/
 | [Performance Testing](performance-testing/) | For a single replica, what is the maximum achievable RPS? | `performance-testing/` |
 
 See [scenarios/passthrough/README.md](scenarios/passthrough/README.md) and [scenarios/transformation/README.md](scenarios/transformation/README.md) for details on each integration scenario and shared assets.
+
+## Documentation
+
+| Scenario | Category | Document |
+| -------- | -------- | -------- |
+| Passthrough | Capacity Planning | [Proposal](docs/capacity-planning/passthrough/Proposal.md) · [Guide](docs/capacity-planning/passthrough/CapacityGuide.md) · [Report](reports/capacity-planning/passthrough/Report.md) |
+| Passthrough | Performance Testing | [Proposal](docs/performance-testing/passthrough/Proposal.md) · [Report](reports/performance-testing/passthrough/Report.md) |
+| Transformation | Capacity Planning | [Proposal](docs/capacity-planning/transformation/Proposal.md) · [Report](reports/capacity-planning/transformation/Report.md) |
+| Transformation | Performance Testing | [Proposal](docs/performance-testing/transformation/Proposal.md) · [Report](reports/performance-testing/transformation/Report.md) |

@@ -4,7 +4,7 @@
 **Date:** 2026-01-27 \
 **Scenario:** HTTP Passthrough \
 **Product:** WSO2 Integrator: BI \
-**Product Version:** Ballerina 2202.13.1 (Swan Lake Update 13) \
+**Product Version:** Ballerina 2201.13.1 (Swan Lake Update 13) \
 **Scale-to-Zero:** Disabled \
 **Endpoint Authentication:** Enabled
 
